@@ -9,9 +9,11 @@ from sklearn.metrics import accuracy_score
 from pymongo import MongoClient
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
-import spacy
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker 
+import pickle
+labels = {0: 'Adult', 1: 'Business/Corporate', 2: 'Computers and Technology', 3: 'E-Commerce', 4: 'Education', 5: 'Food', 6: 'Forums', 7: 'Games', 8: 'Health and Fitness', 9: 'Law and Government', 10: 'News', 11: 'Photography', 12: 'Social Networking and Messaging', 13: 'Sports', 14: 'Streaming Services', 15: 'Travel'}
+data = pd.read_csv("website_classification.csv")
 
 app = Flask(__name__)
 
@@ -19,8 +21,9 @@ app = Flask(__name__)
 app.config['MONGO_URI'] = 'mongodb://localhost:27017/projectracker'
 mongo = MongoClient(app.config['MONGO_URI'])
 db = mongo.projectracker
-engine = create_engine('postgresql://tsdbadmin:hm87vy2trrbags36@nt51y7xqhs.knrrchtp81.tsdb.cloud.timescale.com:36489/tsdb')
+engine = create_engine('postgresql://tsdbadmin:nnbndcdsnnkfemu5@g15kroocga.ied5mx5496.tsdb.cloud.timescale.com:33332/tsdb')
 Session = sessionmaker(bind=engine)
+
 def create_data_match():
     # Create a new session
     session = Session()
@@ -29,7 +32,7 @@ def create_data_match():
         create_table_query = """
         CREATE TABLE IF NOT EXISTS data_match (
             img_id VARCHAR(255),
-            probability TEXT
+            category TEXT
         )
         """
         
@@ -47,15 +50,15 @@ def create_data_match():
         # Close the session
         session.close()
 
-def insert_img_data(img_id, probability):
+def insert_img_data(img_id, category):
     # Create a new session
     session = Session()
     try:
         # Define the SQL query to insert data into the table
-        insert_query = text("INSERT INTO data_match (img_id, probability) VALUES (:img_id, :probability)")
+        insert_query = text("INSERT INTO data_match (img_id, category) VALUES (:img_id, :category)")
         
         # Execute the query with the provided parameters
-        session.execute(insert_query, {"img_id": img_id, "probability": probability})
+        session.execute(insert_query, {"img_id": img_id, "category": category})
         
         # Commit the changes to the database
         session.commit()
@@ -89,45 +92,6 @@ def decision_tree_classification():
     accuracy = accuracy_score(y_test, y_pred)
 
     return clf, accuracy
-
-def check_words_in_csv2(array_words, csv_file, userId):
-    # Load the spaCy model with word embeddings
-    nlp = spacy.load("en_core_web_md")
-
-    # Read the CSV file into a pandas DataFrame
-    df = pd.read_csv(csv_file)
-    # print(df)
-
-    # Define a lower threshold for similarity (adjust as needed)
-    similarity_threshold = 0.7  # You can adjust this threshold
-
-    # Initialize a list to store matching results
-    matching_results = []
-
-    # Iterate over each word from the input array
-    for word in array_words:
-        word_embedding = nlp(word)
-        if len(word_embedding) == 0:
-            continue
-        # Find the most similar word(s) in the CSV using spaCy's word embeddings
-        print("we: ",word_embedding)
-        for csv_word in df['Words']:
-            csv_word_embedding = nlp(csv_word)
-            if len(csv_word_embedding) == 0:
-                continue
-            similarity_score = word_embedding.similarity(csv_word_embedding)
-
-            if similarity_score >= similarity_threshold:
-                matching_results.append({
-                    'word': word,
-                    'project_match': csv_word,
-                    'probability': f'{similarity_score * 100:.2f}%',  # Convert to percentage
-                    'userId': userId
-                })
-
-    # Print matching results
-    for result in matching_results:
-        print(f"Word from Array: {result['word']}, Matched Word to projects: {result['project_match']} with Similarity Score: {result['probability']}")
 
 def check_words_in_csv3(array_words, csv_file, userId):
     # Read the CSV file into a pandas DataFrame
@@ -189,6 +153,17 @@ def check_words_in_csv3(array_words, csv_file, userId):
     print("average_percentage: ",avg_probability_percentage)
     insert_img_data(userId,avg_probability_percentage)
         
+def predictCategory(array_words, userId):
+    final_string = " ".join(array_words)
+    with open("model2.pkl","rb") as f:
+        mf=pickle.load(f)
+    a=mf.predict([final_string])
+    print(labels.get(a[0]))
+    
+    insert_img_data(userId,labels.get(a[0]))
+    
+    
+
 
 def check_words_in_csv(array_words, csv_file, userId):
     # Read the CSV file into a pandas DataFrame
@@ -264,7 +239,8 @@ def post_data():
         # userData=userData.split(" ")
         # print(userData)
         # Call the function to check words in the CSV file
-        check_words_in_csv3(userData, csv_file, userId)
+        # check_words_in_csv3(userData, csv_file, userId)
+        predictCategory(userData, userId)
 
         return jsonify(response_data), 200
     else:
@@ -273,4 +249,5 @@ def post_data():
 
 
 if __name__ == '__main__':
+    # create_data_match()
     app.run(port=8080, debug=True)
