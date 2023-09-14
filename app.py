@@ -10,18 +10,22 @@ from pymongo import MongoClient
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker 
+from sqlalchemy.orm import sessionmaker
 import pickle
+from dotenv import load_dotenv
+load_dotenv()
+import os
+
 labels = {0: 'Adult', 1: 'Business/Corporate', 2: 'Computers and Technology', 3: 'E-Commerce', 4: 'Education', 5: 'Food', 6: 'Forums', 7: 'Games', 8: 'Health and Fitness', 9: 'Law and Government', 10: 'News', 11: 'Photography', 12: 'Social Networking and Messaging', 13: 'Sports', 14: 'Streaming Services', 15: 'Travel'}
 data = pd.read_csv("website_classification.csv")
 
 app = Flask(__name__)
 
 # MongoDB configuration
-app.config['MONGO_URI'] = 'mongodb://localhost:27017/projectracker'
+app.config['MONGO_URI'] = os.getenv('MONGO_URI')
 mongo = MongoClient(app.config['MONGO_URI'])
 db = mongo.projectracker
-engine = create_engine('postgresql://tsdbadmin:nnbndcdsnnkfemu5@g15kroocga.ied5mx5496.tsdb.cloud.timescale.com:33332/tsdb')
+engine = create_engine(os.getenv('POSTGRES_URI'))
 Session = sessionmaker(bind=engine)
 
 def create_data_match():
@@ -30,9 +34,10 @@ def create_data_match():
     try:
         # Define the SQL query to create the img_data table
         create_table_query = """
-        CREATE TABLE IF NOT EXISTS data_match (
+        CREATE TABLE IF NOT EXISTS img_match (
             img_id VARCHAR(255),
-            category TEXT
+            avg_probability TEXT,
+            highest_prob_word TEXT
         )
         """
         
@@ -49,8 +54,39 @@ def create_data_match():
     finally:
         # Close the session
         session.close()
+def get_all_project_names():
+    session = Session()
+    try:
+        # Define the SQL query to select all project names
+        select_query = text("SELECT project_name FROM projects")
+        
+        # Execute the query and fetch all project names
+        result = session.execute(select_query)
+        project_names = [row[0] for row in result]
+        return project_names
 
-def insert_img_data(img_id, category):
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        session.close()
+def insert_project_data(project_names):
+    session = Session()
+    try:
+        # Iterate through the project_names array and insert each value into the table
+        for project_name in project_names:
+            insert_query = text("INSERT INTO projects (project_name) VALUES (:project_name)")
+            session.execute(insert_query, {"project_name": project_name})
+        
+        session.commit()
+        print("Projects inserted successfully")
+
+    except Exception as e:
+        print(f"Error: {e}")
+        session.rollback()
+    finally:
+        session.close()
+
+def insert_data_match(img_id,category):
     # Create a new session
     session = Session()
     try:
@@ -59,6 +95,26 @@ def insert_img_data(img_id, category):
         
         # Execute the query with the provided parameters
         session.execute(insert_query, {"img_id": img_id, "category": category})
+        
+        # Commit the changes to the database
+        session.commit()
+        print("data inserted successfully")
+    except Exception as e:
+        # Roll back the transaction if an error occurs
+        session.rollback()
+        raise e
+    finally:
+        # Close the session
+        session.close()
+def insert_img_data(img_id,avg_probability,highest_prob_word):
+    # Create a new session
+    session = Session()
+    try:
+        # Define the SQL query to insert data into the table
+        insert_query = text("INSERT INTO img_match (img_id,avg_probability,highest_prob_word) VALUES (:img_id,:avg_probability,:highest_prob_word)")
+        
+        # Execute the query with the provided parameters
+        session.execute(insert_query, {"img_id": img_id,"avg_probability":avg_probability, "highest_prob_word":highest_prob_word })
         
         # Commit the changes to the database
         session.commit()
@@ -93,13 +149,13 @@ def decision_tree_classification():
 
     return clf, accuracy
 
-def check_words_in_csv3(array_words, csv_file, userId):
+def check_words_in_csv3(array_words, userId):
     # Read the CSV file into a pandas DataFrame
-    df = pd.read_csv(csv_file)
+    # df = pd.read_csv(csv_file)
 
     # Convert DataFrame column to a set for faster word matching
-    csv_words_set = set(df['Words'].str.strip().values)
-
+    # csv_words_set = set(df['Words'].str.strip().values)
+    csv_words_set=get_all_project_names()
     # Define an empty list to store word match results
     word_match_results = []
 
@@ -139,31 +195,54 @@ def check_words_in_csv3(array_words, csv_file, userId):
                 'prob':round(probability_percentage,2),
                 'probability': f'{probability_percentage:.2f}%',
                 'userId': userId
-            })
+        })
 
     # Print or save the word match results as needed
     # print(word_match_results)
     avg_probability_percentage=0
+    highest_prob_word=""
+    highest_prob=0
     for match_result in word_match_results:
+        if match_result['prob']>highest_prob:
+            highest_prob=match_result['prob']
+            highest_prob_word=match_result['word']
         avg_probability_percentage+=match_result['prob']
         # print(f"Word from Array: {match_result['word']}, "
         #       f"Matched Word to projects: {match_result['project_match']} "
         #       f"with Probability: {match_result['probability']}")
     avg_probability_percentage=avg_probability_percentage/len(word_match_results)
     print("average_percentage: ",avg_probability_percentage)
-    insert_img_data(userId,avg_probability_percentage)
-        
-def predictCategory(array_words, userId):
-    final_string = " ".join(array_words)
+    print("highest prob word: ",highest_prob_word)
+    insert_img_data(userId,avg_probability_percentage,highest_prob_word)
+def get_title(userId):
+    try:
+        # Create a session
+        session = Session()
+
+        # Define the SQL query to select the img_id where userId matches
+        sql_query = text("SELECT user_title FROM system_info WHERE img_id = :user_id")
+
+        # Execute the SQL query with userId as a parameter
+        result = session.execute(sql_query, {"user_id": userId})
+
+        # Fetch the img_id value (assuming there's only one match)
+        img_id = result.scalar()
+
+        # Close the session
+        session.close()
+
+        return img_id
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+def predictCategory(userId):
+    title=get_title(userId)
     with open("model2.pkl","rb") as f:
         mf=pickle.load(f)
-    a=mf.predict([final_string])
-    print(labels.get(a[0]))
-    
-    insert_img_data(userId,labels.get(a[0]))
-    
-    
-
+    a=mf.predict([title])
+    print("predicted Category: ",labels.get(a[0]))
+    insert_data_match(userId,labels.get(a[0]))
 
 def check_words_in_csv(array_words, csv_file, userId):
     # Read the CSV file into a pandas DataFrame
@@ -226,9 +305,6 @@ def post_data():
         userId = data['userId']
 
         # CSV file path containing words in a single column named 'Words'
-        csv_file = "projects.csv"
-
-
 
         # Process the data as needed
         # For this example, we'll just return the received data as JSON
@@ -237,10 +313,11 @@ def post_data():
             'userId': userId
         }
         # userData=userData.split(" ")
-        # print(userData)
         # Call the function to check words in the CSV file
-        # check_words_in_csv3(userData, csv_file, userId)
-        predictCategory(userData, userId)
+        check_words_in_csv3(userData, userId)
+        predictCategory(userId)
+
+
 
         return jsonify(response_data), 200
     else:
@@ -249,5 +326,4 @@ def post_data():
 
 
 if __name__ == '__main__':
-    # create_data_match()
     app.run(port=8080, debug=True)
