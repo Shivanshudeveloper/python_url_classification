@@ -1,0 +1,7 @@
+Flask
+pandas
+scikit-learn
+pymongo
+sqlalchemy
+python-dotenv
+psycopg2-binary
