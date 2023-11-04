@@ -1,34 +1,46 @@
 import pandas as pd
-from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.preprocessing import LabelEncoder
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.svm import SVC
-import joblib as jbl
-import pickle
-labels = {0: 'Adult', 1: 'Business/Corporate', 2: 'Computers and Technology', 3: 'E-Commerce', 4: 'Education', 5: 'Food', 6: 'Forums', 7: 'Games', 8: 'Health and Fitness', 9: 'Law and Government', 10: 'News', 11: 'Photography', 12: 'Social Networking and Messaging', 13: 'Sports', 14: 'Streaming Services', 15: 'Travel'}
-data = pd.read_csv("website_classification.csv")
-x = data.cleaned_website_text
-y = data.Category
-print(y.unique())
-lbe = LabelEncoder()
-lbe.fit(y)
-y = lbe.transform(y)
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import accuracy_score, classification_report
+import joblib
 
-X_train, X_test, y_train, y_test = train_test_split(x, y, test_size = 0.2, random_state = 42)
-model = Pipeline([
-    ('vecorizer', TfidfVectorizer()),
-    ('clf', LogisticRegression())
-])
+# Load your dataset (replace 'your_data.csv' with your CSV file)
+df = pd.read_csv('categories.csv')
+
+# Preprocessing: Combine domain and title into a single text_data column
+df['text_data'] = df['title'] + ' ' + df['domain']
+# print(df.columns)
+# Label Encoding
+from sklearn.preprocessing import LabelEncoder
+label_encoder = LabelEncoder()
+df['label'] = label_encoder.fit_transform(df['category'])
+
+joblib.dump(label_encoder, 'label_encoder.joblib')
+# Feature Extraction using TF-IDF
+tfidf_vectorizer = TfidfVectorizer()
+X = tfidf_vectorizer.fit_transform(df['text_data'])  # Fit on the entire dataset
+
+joblib.dump(tfidf_vectorizer, 'tfif_vectorizer.joblib')
+
+# joblib.dump(tfidf_vectorizer, 'tfidVectorizer.joblib')
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, df['label'], test_size=0.2, random_state=42)
+
+# Choose a classification model (e.g., Multinomial Naive Bayes)
+model = MultinomialNB()
+
+# Train the model
 model.fit(X_train, y_train)
-a=model.score(X_test, y_test)
-print(a)
 
-# jbl.dump(model, 'model.pkl')
-# with open("model2.pkl","wb") as f:
-#     pickle.dump(model,f)
-# ind=model.predict(["playing football"])
-# print(labels.get(ind[0]))
+# Make predictions
+y_pred = model.predict(X_test)
+
+# Evaluate the model
+accuracy = accuracy_score(y_test, y_pred)
+print("Accuracy:", accuracy)
+# print(classification_report(y_test, y_pred))
+
+# Save the trained model
+joblib.dump(model, 'website_classifier_model.joblib')
+print("Successfully trained model")

@@ -12,6 +12,7 @@ import numpy as np
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 import pickle
+from sklearn.feature_extraction.text import TfidfVectorizer # imported this module to convert string to number
 from dotenv import load_dotenv
 load_dotenv()
 import os
@@ -26,6 +27,7 @@ app.config['MONGO_URI'] = os.getenv('MONGO_URI')
 mongo = MongoClient(app.config['MONGO_URI'])
 db = mongo.projectracker
 engine = create_engine(os.getenv('POSTGRES_URI'))
+print(os.getenv("POSTGRES_URI"),os.getenv('MONGO_URI'))
 Session = sessionmaker(bind=engine)
 
 def create_data_match():
@@ -57,6 +59,28 @@ def create_data_match():
 def get_all_project_names():
     session = Session()
     try:
+        # Check if the "projects" table exists, and create it if it doesn't.
+        create_projects_table_query = """
+        CREATE TABLE IF NOT EXISTS projects (
+            project_name VARCHAR(255)
+        )
+        """
+        session.execute(text(create_projects_table_query))
+
+        # Define the SQL query to select all project names
+        select_query = text("SELECT project_name FROM projects")
+
+        # Execute the query and fetch all project names
+        result = session.execute(select_query)
+        project_names = [row[0] for row in result]
+        return project_names
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        session.close()
+
+    session = Session()
+    try:
         # Define the SQL query to select all project names
         select_query = text("SELECT project_name FROM projects")
         
@@ -69,22 +93,31 @@ def get_all_project_names():
         print(f"Error: {e}")
     finally:
         session.close()
+        
 def insert_project_data(project_names):
     session = Session()
     try:
+        # Check if the "projects" table exists, and create it if it doesn't.
+        create_projects_table_query = """
+        CREATE TABLE IF NOT EXISTS projects (
+            project_name VARCHAR(255)
+        )
+        """
+        session.execute(text(create_projects_table_query))
+
         # Iterate through the project_names array and insert each value into the table
         for project_name in project_names:
             insert_query = text("INSERT INTO projects (project_name) VALUES (:project_name)")
             session.execute(insert_query, {"project_name": project_name})
-        
+
         session.commit()
         print("Projects inserted successfully")
-
     except Exception as e:
         print(f"Error: {e}")
         session.rollback()
     finally:
         session.close()
+        
 
 def insert_data_match(img_id,category):
     # Create a new session
@@ -106,19 +139,31 @@ def insert_data_match(img_id,category):
     finally:
         # Close the session
         session.close()
-def insert_img_data(img_id,avg_probability,highest_prob_word):
+
+
+def insert_img_data(img_id, avg_probability, highest_prob_word):
     # Create a new session
     session = Session()
     try:
+        # Check if the "img_match" table exists, and create it if it doesn't.
+        create_img_match_table_query = """
+        CREATE TABLE IF NOT EXISTS img_match (
+            img_id VARCHAR(255),
+            avg_probability TEXT,
+            highest_prob_word TEXT
+        )
+        """
+        session.execute(text(create_img_match_table_query))
+
         # Define the SQL query to insert data into the table
-        insert_query = text("INSERT INTO img_match (img_id,avg_probability,highest_prob_word) VALUES (:img_id,:avg_probability,:highest_prob_word)")
+        insert_query = text("INSERT INTO img_match (img_id, avg_probability, highest_prob_word) VALUES (:img_id, :avg_probability, :highest_prob_word)")
         
         # Execute the query with the provided parameters
-        session.execute(insert_query, {"img_id": img_id,"avg_probability":avg_probability, "highest_prob_word":highest_prob_word })
+        session.execute(insert_query, {"img_id": img_id, "avg_probability": avg_probability, "highest_prob_word": highest_prob_word })
         
         # Commit the changes to the database
         session.commit()
-        print("data inserted successfully")
+        print("Data inserted successfully")
     except Exception as e:
         # Roll back the transaction if an error occurs
         session.rollback()
@@ -210,7 +255,8 @@ def check_words_in_csv3(array_words, userId):
         # print(f"Word from Array: {match_result['word']}, "
         #       f"Matched Word to projects: {match_result['project_match']} "
         #       f"with Probability: {match_result['probability']}")
-    avg_probability_percentage=avg_probability_percentage/len(word_match_results)
+        if len(word_match_results) > 0:
+            avg_probability_percentage=avg_probability_percentage/len(word_match_results)
     print("average_percentage: ",avg_probability_percentage)
     print("highest prob word: ",highest_prob_word)
     insert_img_data(userId,avg_probability_percentage,highest_prob_word)
@@ -220,7 +266,7 @@ def get_title(userId):
         session = Session()
 
         # Define the SQL query to select the img_id where userId matches
-        sql_query = text("SELECT user_title FROM system_info WHERE img_id = :user_id")
+        sql_query = text("SELECT user_title FROM system_info WHERE id = :user_id")
 
         # Execute the SQL query with userId as a parameter
         result = session.execute(sql_query, {"user_id": userId})
@@ -228,6 +274,7 @@ def get_title(userId):
         # Fetch the img_id value (assuming there's only one match)
         img_id = result.scalar()
 
+        print("img_id",img_id,"userId",userId)
         # Close the session
         session.close()
 
@@ -236,11 +283,16 @@ def get_title(userId):
     except Exception as e:
         print(f"Error: {e}")
         return None
+        
 def predictCategory(userId):
     title=get_title(userId)
-    with open("model2.pkl","rb") as f:
+    # tfidf_vectorizer = TfidfVectorizer()
+    # training_data = ["I am Oversmart idiot"]  # Replace with your actual training data
+    # tfidf_vectorizer.fit(training_data)
+    # title_transform = tfidf_vectorizer.transform(title)
+    with open("website_classifier_model.joblib","rb") as f:
         mf=pickle.load(f)
-    a=mf.predict([title])
+    a=mf.predict([[title]])
     print("predicted Category: ",labels.get(a[0]))
     insert_data_match(userId,labels.get(a[0]))
 
