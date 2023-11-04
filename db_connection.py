@@ -2,7 +2,7 @@ import sqlalchemy
 import psycopg2
 
 # Define your database connection details
-db_url = "postgresql://tsdbadmin:a-zi5r2T7.9GZP@c8voureiir.y3scsyzh76.tsdb.cloud.timescale.com:38528/tsdb?sslmode=require"
+db_url = "POSTGRESURL"
 
 # Create a SQLAlchemy engine
 engine = sqlalchemy.create_engine(db_url)
