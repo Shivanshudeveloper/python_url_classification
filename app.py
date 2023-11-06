@@ -16,7 +16,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer # imported this modu
 from dotenv import load_dotenv
 load_dotenv()
 import os
-
+import joblib
 labels = {0: 'Adult', 1: 'Business/Corporate', 2: 'Computers and Technology', 3: 'E-Commerce', 4: 'Education', 5: 'Food', 6: 'Forums', 7: 'Games', 8: 'Health and Fitness', 9: 'Law and Government', 10: 'News', 11: 'Photography', 12: 'Social Networking and Messaging', 13: 'Sports', 14: 'Streaming Services', 15: 'Travel'}
 data = pd.read_csv("website_classification.csv")
 
@@ -266,7 +266,7 @@ def get_title(userId):
         session = Session()
 
         # Define the SQL query to select the img_id where userId matches
-        sql_query = text("SELECT user_title FROM system_info WHERE id = :user_id")
+        sql_query = text("SELECT user_title FROM system_info WHERE id  = :user_id")
 
         # Execute the SQL query with userId as a parameter
         result = session.execute(sql_query, {"user_id": userId})
@@ -286,15 +286,24 @@ def get_title(userId):
         
 def predictCategory(userId):
     title=get_title(userId)
+    label_encoder = joblib.load('label_encoder.joblib')
+    vectorizer = joblib.load('tfif_vectorizer.joblib')
+    model = joblib.load('website_classifier_model.joblib')
+
+    original = vectorizer.transform([title])
     # tfidf_vectorizer = TfidfVectorizer()
     # training_data = ["I am Oversmart idiot"]  # Replace with your actual training data
     # tfidf_vectorizer.fit(training_data)
     # title_transform = tfidf_vectorizer.transform(title)
-    with open("website_classifier_model.joblib","rb") as f:
-        mf=pickle.load(f)
-    a=mf.predict([[title]])
-    print("predicted Category: ",labels.get(a[0]))
-    insert_data_match(userId,labels.get(a[0]))
+    # with open("website_classifier_model.joblib","rb") as f:
+    #     mf=pickle.load(f)
+    a=model.predict(original)
+
+    result = label_encoder.inverse_transform(a)
+    print(result)
+
+    print("predicted Category: ",result[0])
+    # insert_data_match(userId,labels.get(a[0]))
 
 def check_words_in_csv(array_words, csv_file, userId):
     # Read the CSV file into a pandas DataFrame
