@@ -27,7 +27,7 @@ app.config['MONGO_URI'] = os.getenv('MONGO_URI')
 mongo = MongoClient(app.config['MONGO_URI'])
 db = mongo.projectracker
 engine = create_engine(os.getenv('POSTGRES_URI'))
-print(os.getenv("POSTGRES_URI"),os.getenv('MONGO_URI'))
+# print(os.getenv("POSTGRES_URI"),os.getenv('MONGO_URI'))
 Session = sessionmaker(bind=engine)
 
 def create_data_match():
@@ -123,6 +123,14 @@ def insert_data_match(img_id,category):
     # Create a new session
     session = Session()
     try:
+        create_projects_table_query = """
+        CREATE TABLE IF NOT EXISTS data_match (
+            img_id VARCHAR(255),
+            category TEXT
+        )
+        """
+        session.execute(text(create_projects_table_query))
+
         # Define the SQL query to insert data into the table
         insert_query = text("INSERT INTO data_match (img_id, category) VALUES (:img_id, :category)")
         
@@ -132,6 +140,7 @@ def insert_data_match(img_id,category):
         # Commit the changes to the database
         session.commit()
         print("data inserted successfully")
+
     except Exception as e:
         # Roll back the transaction if an error occurs
         session.rollback()
@@ -303,6 +312,7 @@ def predictCategory(userId):
     print(result)
 
     print("predicted Category: ",result[0])
+    insert_data_match(userId,result[0])
     # insert_data_match(userId,labels.get(a[0]))
 
 def check_words_in_csv(array_words, csv_file, userId):
