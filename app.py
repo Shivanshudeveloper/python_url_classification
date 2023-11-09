@@ -2,6 +2,7 @@
 from flask import Flask, request, jsonify
 import difflib
 import pandas as pd
+import difflib
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
@@ -12,7 +13,7 @@ import numpy as np
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 import pickle
-from sklearn.feature_extraction.text import TfidfVectorizer # imported this module to convert string to number
+from sklearn.feature_extraction.text import TfidfVectorizer
 from dotenv import load_dotenv
 load_dotenv()
 import os
@@ -26,9 +27,32 @@ app = Flask(__name__)
 app.config['MONGO_URI'] = os.getenv('MONGO_URI')
 mongo = MongoClient(app.config['MONGO_URI'])
 db = mongo.projectracker
-engine = create_engine(os.getenv('POSTGRES_URI'))
-# print(os.getenv("POSTGRES_URI"),os.getenv('MONGO_URI'))
+
+import mysql.connector
+
+connection = mysql.connector.connect(
+  host=os.getenv("DB_HOST"),
+  user=os.getenv("DB_USERNAME"),
+  password=os.getenv("DB_PASSWORD"),
+  database=os.getenv("DB_NAME")  # Specify the MySQL database name
+)
+engine = create_engine(f'mysql+mysqlconnector://{os.getenv("DB_USERNAME")}:{os.getenv("DB_PASSWORD")}@{os.getenv("DB_HOST")}/{os.getenv("DB_NAME")}')
+
 Session = sessionmaker(bind=engine)
+
+# Define a function to create a MySQL connection
+def create_mysql_connection():
+    try:
+        connection = mysql.connector.connect(
+            host=os.getenv("DB_HOST"),
+            user=os.getenv("DB_USERNAME"),
+            password=os.getenv("DB_PASSWORD"),
+            database=os.getenv("DB_NAME")
+        )
+        return connection
+    except Exception as e:
+        print(f"Error creating MySQL connection: {e}")
+        return None
 
 def create_data_match():
     # Create a new session
@@ -56,6 +80,7 @@ def create_data_match():
     finally:
         # Close the session
         session.close()
+
 def get_all_project_names():
     session = Session()
     try:
@@ -79,21 +104,6 @@ def get_all_project_names():
     finally:
         session.close()
 
-    session = Session()
-    try:
-        # Define the SQL query to select all project names
-        select_query = text("SELECT project_name FROM projects")
-        
-        # Execute the query and fetch all project names
-        result = session.execute(select_query)
-        project_names = [row[0] for row in result]
-        return project_names
-
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        session.close()
-        
 def insert_project_data(project_names):
     session = Session()
     try:
@@ -117,9 +127,8 @@ def insert_project_data(project_names):
         session.rollback()
     finally:
         session.close()
-        
 
-def insert_data_match(img_id,category):
+def insert_data_match(img_id, category):
     # Create a new session
     session = Session()
     try:
@@ -148,7 +157,6 @@ def insert_data_match(img_id,category):
     finally:
         # Close the session
         session.close()
-
 
 def insert_img_data(img_id, avg_probability, highest_prob_word):
     # Create a new session
@@ -208,8 +216,8 @@ def check_words_in_csv3(array_words, userId):
     # df = pd.read_csv(csv_file)
 
     # Convert DataFrame column to a set for faster word matching
-    # csv_words_set = set(df['Words'].str.strip().values)
-    csv_words_set=get_all_project_names()
+    csv_words_set = get_all_project_names()
+    
     # Define an empty list to store word match results
     word_match_results = []
 
@@ -224,11 +232,11 @@ def check_words_in_csv3(array_words, userId):
         # Calculate the similarity ratio with each CSV word
         for csv_word in csv_words_set:
             csv_word = csv_word.strip() # Remove leading/trailing whitespace
-            # print(csv_word)
+
             # Use SequenceMatcher to calculate the similarity ratio
             matcher = difflib.SequenceMatcher(None, word, csv_word)
             similarity_ratio = matcher.ratio()
-            # print(similarity_ratio)
+
             # Check if the current word has a higher similarity ratio
             if similarity_ratio > best_similarity_ratio:
                 best_similarity_ratio = similarity_ratio
@@ -241,34 +249,30 @@ def check_words_in_csv3(array_words, userId):
         if best_similarity_ratio >= similarity_threshold:
             # Calculate the probability (similarity ratio as a percentage)
             probability_percentage = best_similarity_ratio * 100
-            # print(best_similarity_ratio," is greater than ",similarity_threshold)
-            # Append the match result to the list
+
             word_match_results.append({
                 'word': word,
                 'project_match': best_match,
-                'prob':round(probability_percentage,2),
+                'prob': round(probability_percentage, 2),
                 'probability': f'{probability_percentage:.2f}%',
                 'userId': userId
-        })
+            })
 
-    # Print or save the word match results as needed
-    # print(word_match_results)
-    avg_probability_percentage=0
-    highest_prob_word=""
-    highest_prob=0
+    avg_probability_percentage = 0
+    highest_prob_word = ""
+    highest_prob = 0
     for match_result in word_match_results:
-        if match_result['prob']>highest_prob:
-            highest_prob=match_result['prob']
-            highest_prob_word=match_result['word']
-        avg_probability_percentage+=match_result['prob']
-        # print(f"Word from Array: {match_result['word']}, "
-        #       f"Matched Word to projects: {match_result['project_match']} "
-        #       f"with Probability: {match_result['probability']}")
-        if len(word_match_results) > 0:
-            avg_probability_percentage=avg_probability_percentage/len(word_match_results)
-    print("average_percentage: ",avg_probability_percentage)
-    print("highest prob word: ",highest_prob_word)
-    insert_img_data(userId,avg_probability_percentage,highest_prob_word)
+        if match_result['prob'] > highest_prob:
+            highest_prob = match_result['prob']
+            highest_prob_word = match_result['word']
+        avg_probability_percentage += match_result['prob']
+
+    if len(word_match_results) > 0:
+        avg_probability_percentage = avg_probability_percentage / len(word_match_results)
+    print("average_percentage: ", avg_probability_percentage)
+    print("highest prob word: ", highest_prob_word)
+    insert_img_data(userId, avg_probability_percentage, highest_prob_word)
+
 def get_title(userId):
     try:
         # Create a session
@@ -283,7 +287,7 @@ def get_title(userId):
         # Fetch the img_id value (assuming there's only one match)
         img_id = result.scalar()
 
-        print("img_id",img_id,"userId",userId)
+        print("img_id", img_id, "userId", userId)
         # Close the session
         session.close()
 
@@ -294,77 +298,28 @@ def get_title(userId):
         return None
         
 def predictCategory(userId):
-    title=get_title(userId)
-    label_encoder = joblib.load('label_encoder.joblib')
-    vectorizer = joblib.load('tfif_vectorizer.joblib')
-    model = joblib.load('website_classifier_model.joblib')
+    title = get_title(userId)
 
-    original = vectorizer.transform([title])
-    # tfidf_vectorizer = TfidfVectorizer()
-    # training_data = ["I am Oversmart idiot"]  # Replace with your actual training data
-    # tfidf_vectorizer.fit(training_data)
-    # title_transform = tfidf_vectorizer.transform(title)
-    # with open("website_classifier_model.joblib","rb") as f:
-    #     mf=pickle.load(f)
-    a=model.predict(original)
+    if title is not None:
+        label_encoder = joblib.load('label_encoder.joblib')
+        vectorizer = joblib.load('tfif_vectorizer.joblib')
+        model = joblib.load('website_classifier_model.joblib')
 
-    result = label_encoder.inverse_transform(a)
-    print(result)
+        original = vectorizer.transform([title])
 
-    print("predicted Category: ",result[0])
-    insert_data_match(userId,result[0])
-    # insert_data_match(userId,labels.get(a[0]))
+        a = model.predict(original)
 
-def check_words_in_csv(array_words, csv_file, userId):
-    # Read the CSV file into a pandas DataFrame
-    df = pd.read_csv(csv_file)
-    # nlp = spacy.load("en_core_web_md")
-    # matching_results = []
+        result = label_encoder.inverse_transform(a)
+        print(result)
 
-    # Convert DataFrame column to a set for faster word matching
-    csv_words_set = set(df['Words'].str.strip().values)
-
-    # print(csv_words_set)
-
-    # Define a lower threshold for similarity ratio (60% matching in this case)
-    similarity_threshold = 0.2
-
-    # Check each word from the array against the CSV words and print if there is a match
-    for word in array_words:
-        # word_embedding = nlp(word)
-        # Find the most similar word(s) in the CSV using difflib
-        matches = difflib.get_close_matches(word.strip(), csv_words_set, n=1, cutoff=similarity_threshold)
-
-        # If there is a match, print the word from the array and the matched word from the CSV
-        if matches:
-            # print("matches",matches)
-            matched_word = matches[0]
-            # Calculate cosine similarity between the original word and the matched word
-            # original_word_vector = np.array([1 if w in word else 0 for w in matched_word.split()])
-            # matched_word_vector = np.array([1 if w in matched_word else 0 for w in word.split()])
-            # similarity_score = cosine_similarity([original_word_vector], [matched_word_vector])[0][0]
-
-            original_word_vector = np.array([1 if w in word else 0 for w in csv_words_set])
-            matched_word_vector = np.array([1 if w in matched_word else 0 for w in csv_words_set])
-
-            # Calculate cosine similarity between the two vectors
-            similarity_score = cosine_similarity([original_word_vector], [matched_word_vector])[0][0]
-            new_data = {
-                'word': word,
-                'project_match': matches[0],
-                'probability': f'{similarity_score * 100:.2f}%',
-                'userId': userId
-            }
-
-            # Save the post to MongoDB collection
-            # db.projects_matches.insert_one(new_data)
-            insert_img_data(userId,new_data['probability'])
-            print(f"Word from Array: {word}, Matched Word to projects: {matches[0]} at below {new_data['probability']}")
+        print("predicted Category: ", result[0])
+        insert_data_match(userId, result[0])
+    else:
+        print(f"Title not found for userId: {userId}")
 
 @app.route('/')
 def hello():
     return 'Hello, Flask!'
-
 
 @app.route('/mlwork', methods=['POST'])
 def post_data():
@@ -375,26 +330,19 @@ def post_data():
         userData = data['userData']
         userId = data['userId']
 
-        # CSV file path containing words in a single column named 'Words'
-
         # Process the data as needed
         # For this example, we'll just return the received data as JSON
         response_data = {
             'userData': userData,
             'userId': userId
         }
-        # userData=userData.split(" ")
-        # Call the function to check words in the CSV file
+
         check_words_in_csv3(userData, userId)
         predictCategory(userId)
 
-
-
         return jsonify(response_data), 200
     else:
-        return jsonify({'error': 'Invalid JSON data. "my_array" and "my_string" keys are required.'}), 400
-
-
+        return jsonify({'error': 'Invalid JSON data. "userData" and "userId" keys are required.'}), 400
 
 if __name__ == '__main__':
     app.run(port=8080, debug=True)
