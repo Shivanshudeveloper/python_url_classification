@@ -1,348 +1,226 @@
-# app.py
-from flask import Flask, request, jsonify
-import difflib
-import pandas as pd
-import difflib
-from sklearn.datasets import load_iris
-from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score
-from pymongo import MongoClient
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
+from flask import Flask, jsonify
+from flask_cors import CORS  # Import CORS
+from datetime import datetime, timedelta
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-import pickle
-from sklearn.feature_extraction.text import TfidfVectorizer
-from dotenv import load_dotenv
-load_dotenv()
-import os
 import joblib
-labels = {0: 'Adult', 1: 'Business/Corporate', 2: 'Computers and Technology', 3: 'E-Commerce', 4: 'Education', 5: 'Food', 6: 'Forums', 7: 'Games', 8: 'Health and Fitness', 9: 'Law and Government', 10: 'News', 11: 'Photography', 12: 'Social Networking and Messaging', 13: 'Sports', 14: 'Streaming Services', 15: 'Travel'}
-data = pd.read_csv("website_classification.csv")
+from dotenv import load_dotenv
+import os
 
+# Load environment variables
+load_dotenv()
+
+# Constants
+labels = {
+    0: 'Adult',
+    1: 'Business/Corporate',
+    2: 'Computers and Technology',
+    3: 'E-Commerce',
+    4: 'Education',
+    5: 'Food',
+    6: 'Forums',
+    7: 'Games',
+    8: 'Health and Fitness',
+    9: 'Law and Government',
+    10: 'News',
+    11: 'Photography',
+    12: 'Social Networking and Messaging',
+    13: 'Sports',
+    14: 'Streaming Services',
+    15: 'Travel'
+}
+
+# Mapping categories to productivity status
+productivity_map = {
+    'Adult': 'Unproductive',
+    'Business/Corporate': 'Productive',
+    'Computers and Technology': 'Productive',
+    'E-Commerce': 'Productive',
+    'Education': 'Productive',
+    'Food': 'Neutral',
+    'Forums': 'Neutral',
+    'Games': 'Unproductive',
+    'Health and Fitness': 'Productive',
+    'Law and Government': 'Productive',
+    'News': 'Neutral',
+    'Photography': 'Neutral',
+    'Social Networking and Messaging': 'Unproductive',
+    'Sports': 'Unproductive',
+    'Streaming Services': 'Unproductive',
+    'Travel': 'Neutral',
+    'Development': 'Productive',
+    'Entertainment & Leisure': 'Unproductive',
+    'Meeting & Webinar Platforms': 'Productive',
+    'Chat & Instant Messaging': 'Neutral',
+    'Email Platforms': 'Neutral',
+    'Task & Project Management': 'Productive',
+    'Document Collaboration & Sharing': 'Productive',
+    'IDEs & Code Editors': 'Productive',
+    'Database Management': 'Productive',
+    'Version Control Platforms': 'Productive',
+    'CI/CD Tools': 'Productive',
+    'Adobe Creative Cloud': 'Productive',
+    'Figma': 'Productive',
+    'Canva': 'Productive',
+    'Research Publications & Journals': 'Productive',
+    'Online Courses & Platforms': 'Productive',
+    'Knowledge-sharing & Forums': 'Productive',
+    'National News': 'Neutral',
+    'International News': 'Neutral',
+    'Industry-specific Publications': 'Neutral',
+    'Professional Networking': 'Productive',
+    'General Social Media': 'Unproductive',
+    'Movies & Series Streaming': 'Unproductive',
+    'Gaming & Related Platforms': 'Unproductive',
+    'Lifestyle & Blogs': 'Unproductive',
+    'Calculators & Converters': 'Neutral',
+    'Translation & Language Tools': 'Neutral',
+    'Cloud Storage': 'Productive',
+    'Amazon': 'Unproductive',
+    'eBay': 'Unproductive',
+    'Flipkart': 'Unproductive',
+    'Etsy': 'Unproductive',
+    'Myntra': 'Unproductive',
+    'Sports News & Updates': 'Unproductive',
+    'Live Streaming & Highlights': 'Unproductive',
+    'Explicit Content Sites': 'Unproductive',
+    'Dating & Relationship Platforms': 'Unproductive',
+    'Gambling & Betting': 'Unproductive',
+    'Educational & Informative': 'Productive',
+    'Professional & Industry-Specific': 'Productive',
+    'Entertainment': 'Unproductive',
+    'Lifestyle, Arts & Creativity': 'Neutral',
+    'Gaming': 'Unproductive',
+    'Sports & Fitness': 'Productive',
+    'Tech & Gadgets': 'Productive',
+    'Children & Family': 'Neutral',
+    'Culture & Society': 'Neutral',
+    'Miscellaneous': 'Neutral',
+    "Communication Tools": "Productive",
+    "Research & Learning": "Productive"
+}
+
+# Load machine learning models
+label_encoder = joblib.load('label_encoder.joblib')
+vectorizer = joblib.load('tfif_vectorizer.joblib')
+model = joblib.load('website_classifier_model.joblib')
+
+# Initialize Flask app
 app = Flask(__name__)
+CORS(app)  # Enable CORS for the Flask app
 
-# MongoDB configuration
-app.config['MONGO_URI'] = os.getenv('MONGO_URI')
-mongo = MongoClient(app.config['MONGO_URI'])
-db = mongo.projectracker
-
-import mysql.connector
-
-connection = mysql.connector.connect(
-  host=os.getenv("DB_HOST"),
-  user=os.getenv("DB_USERNAME"),
-  password=os.getenv("DB_PASSWORD"),
-  database=os.getenv("DB_NAME")  # Specify the MySQL database name
-)
+# Database configuration
 engine = create_engine(f'mysql+mysqlconnector://{os.getenv("DB_USERNAME")}:{os.getenv("DB_PASSWORD")}@{os.getenv("DB_HOST")}/{os.getenv("DB_NAME")}')
-
 Session = sessionmaker(bind=engine)
 
-# Define a function to create a MySQL connection
-def create_mysql_connection():
-    try:
-        connection = mysql.connector.connect(
-            host=os.getenv("DB_HOST"),
-            user=os.getenv("DB_USERNAME"),
-            password=os.getenv("DB_PASSWORD"),
-            database=os.getenv("DB_NAME")
-        )
-        return connection
-    except Exception as e:
-        print(f"Error creating MySQL connection: {e}")
-        return None
-
-def create_data_match():
-    # Create a new session
+def get_all_device_ids():
     session = Session()
     try:
-        # Define the SQL query to create the img_data table
-        create_table_query = """
-        CREATE TABLE IF NOT EXISTS img_match (
-            img_id VARCHAR(255),
-            avg_probability TEXT,
-            highest_prob_word TEXT
-        )
-        """
-        
-        # Execute the query to create the table
-        session.execute(text(create_table_query))
-        
-        # Commit the changes to the database
-        print("success\n")
-        session.commit()
-    except Exception as e:
-        # Roll back the transaction if an error occurs
-        session.rollback()
-        raise e
-    finally:
-        # Close the session
-        session.close()
-
-def get_all_project_names():
-    session = Session()
-    try:
-        # Check if the "projects" table exists, and create it if it doesn't.
-        create_projects_table_query = """
-        CREATE TABLE IF NOT EXISTS projects (
-            project_name VARCHAR(255)
-        )
-        """
-        session.execute(text(create_projects_table_query))
-
-        # Define the SQL query to select all project names
-        select_query = text("SELECT project_name FROM projects")
-
-        # Execute the query and fetch all project names
-        result = session.execute(select_query)
-        project_names = [row[0] for row in result]
-        return project_names
+        result = session.execute(text("SELECT device_uid, user_name FROM devices")).fetchall()
+        devices = [{'device_uid': row[0], 'user_name': row[1]} for row in result]
+        return devices
     except Exception as e:
         print(f"Error: {e}")
     finally:
         session.close()
 
-def insert_project_data(project_names):
+def get_user_activities(device_uid):
     session = Session()
     try:
-        # Check if the "projects" table exists, and create it if it doesn't.
-        create_projects_table_query = """
-        CREATE TABLE IF NOT EXISTS projects (
-            project_name VARCHAR(255)
-        )
-        """
-        session.execute(text(create_projects_table_query))
-
-        # Iterate through the project_names array and insert each value into the table
-        for project_name in project_names:
-            insert_query = text("INSERT INTO projects (project_name) VALUES (:project_name)")
-            session.execute(insert_query, {"project_name": project_name})
-
-        session.commit()
-        print("Projects inserted successfully")
+        result = session.execute(text("SELECT url, timestamp FROM user_activity WHERE user_uid = :device_uid ORDER BY timestamp"), {"device_uid": device_uid}).fetchall()
+        activities = [(row[0], row[1]) for row in result]
+        return activities
     except Exception as e:
         print(f"Error: {e}")
-        session.rollback()
     finally:
         session.close()
 
-def insert_data_match(img_id, category):
-    # Create a new session
-    session = Session()
-    try:
-        create_projects_table_query = """
-        CREATE TABLE IF NOT EXISTS data_match (
-            img_id VARCHAR(255),
-            category TEXT
-        )
-        """
-        session.execute(text(create_projects_table_query))
+def predict_category(title):
+    transformed = vectorizer.transform([title])
+    prediction = model.predict(transformed)
+    category = label_encoder.inverse_transform(prediction)[0]
+    return category
 
-        # Define the SQL query to insert data into the table
-        insert_query = text("INSERT INTO data_match (img_id, category) VALUES (:img_id, :category)")
-        
-        # Execute the query with the provided parameters
-        session.execute(insert_query, {"img_id": img_id, "category": category})
-        
-        # Commit the changes to the database
-        session.commit()
-        print("data inserted successfully")
+def calculate_productivity_internal(activities):
+    productivity_counts = {'Productive': 0, 'Neutral': 0, 'Unproductive': 0, 'Away': 0}
+    total_time = timedelta(hours=1)  # Total duration is fixed as one hour
 
-    except Exception as e:
-        # Roll back the transaction if an error occurs
-        session.rollback()
-        raise e
-    finally:
-        # Close the session
-        session.close()
+    hourly_activities = {}
+    for url, timestamp in activities:
+        hour_key = timestamp.replace(minute=0, second=0, microsecond=0)
+        if hour_key not in hourly_activities:
+            hourly_activities[hour_key] = []
+        hourly_activities[hour_key].append((url, timestamp))
 
-def insert_img_data(img_id, avg_probability, highest_prob_word):
-    # Create a new session
-    session = Session()
-    try:
-        # Check if the "img_match" table exists, and create it if it doesn't.
-        create_img_match_table_query = """
-        CREATE TABLE IF NOT EXISTS img_match (
-            img_id VARCHAR(255),
-            avg_probability TEXT,
-            highest_prob_word TEXT
-        )
-        """
-        session.execute(text(create_img_match_table_query))
+    hourly_productivity = {}
+    for hour, activities in hourly_activities.items():
+        activities.sort(key=lambda x: x[1])
+        first_activity = activities[0][1]
+        last_activity = activities[-1][1]
 
-        # Define the SQL query to insert data into the table
-        insert_query = text("INSERT INTO img_match (img_id, avg_probability, highest_prob_word) VALUES (:img_id, :avg_probability, :highest_prob_word)")
-        
-        # Execute the query with the provided parameters
-        session.execute(insert_query, {"img_id": img_id, "avg_probability": avg_probability, "highest_prob_word": highest_prob_word })
-        
-        # Commit the changes to the database
-        session.commit()
-        print("Data inserted successfully")
-    except Exception as e:
-        # Roll back the transaction if an error occurs
-        session.rollback()
-        raise e
-    finally:
-        # Close the session
-        session.close()
+        active_time = last_activity - first_activity
+        away_time = total_time - active_time
+        hourly_counts = {'Productive': 0, 'Neutral': 0, 'Unproductive': 0}
 
-def decision_tree_classification():
-    # Load the Iris dataset (you can replace it with your own dataset)
-    iris = load_iris()
-    X, y = iris.data, iris.target
+        for url, _ in activities:
+            category = predict_category(url)
+            status = productivity_map.get(category, 'Unknown')
+            hourly_counts[status] += 1
 
-    # Split the dataset into training and testing sets (80% for training, 20% for testing)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        total_activities = sum(hourly_counts.values())
+        productive_percentage = (hourly_counts['Productive'] / total_activities) * 100 if total_activities else 0
+        unproductive_percentage = (hourly_counts['Unproductive'] / total_activities) * 100 if total_activities else 0
+        neutral_percentage = (hourly_counts['Neutral'] / total_activities) * 100 if total_activities else 0
+        away_percentage = (away_time / total_time) * 100
 
-    # Create a Decision Tree classifier
-    clf = DecisionTreeClassifier()
-
-    # Train the classifier on the training data
-    clf.fit(X_train, y_train)
-
-    # Make predictions on the test data
-    y_pred = clf.predict(X_test)
-
-    # Calculate the accuracy of the classifier
-    accuracy = accuracy_score(y_test, y_pred)
-
-    return clf, accuracy
-
-def check_words_in_csv3(array_words, userId):
-    # Read the CSV file into a pandas DataFrame
-    # df = pd.read_csv(csv_file)
-
-    # Convert DataFrame column to a set for faster word matching
-    csv_words_set = get_all_project_names()
-    
-    # Define an empty list to store word match results
-    word_match_results = []
-
-    # Iterate through each word from the array
-    for word in array_words:
-        word = word.strip() # Remove leading/trailing whitespace
-
-        # Initialize variables to keep track of the best match and its similarity ratio
-        best_match = None
-        best_similarity_ratio = 0.0
-
-        # Calculate the similarity ratio with each CSV word
-        for csv_word in csv_words_set:
-            csv_word = csv_word.strip() # Remove leading/trailing whitespace
-
-            # Use SequenceMatcher to calculate the similarity ratio
-            matcher = difflib.SequenceMatcher(None, word, csv_word)
-            similarity_ratio = matcher.ratio()
-
-            # Check if the current word has a higher similarity ratio
-            if similarity_ratio > best_similarity_ratio:
-                best_similarity_ratio = similarity_ratio
-                best_match = csv_word
-
-        # Define a threshold for considering a match
-        similarity_threshold = 0.2 # You can adjust this threshold as needed
-
-        # Check if the best match meets the similarity threshold
-        if best_similarity_ratio >= similarity_threshold:
-            # Calculate the probability (similarity ratio as a percentage)
-            probability_percentage = best_similarity_ratio * 100
-
-            word_match_results.append({
-                'word': word,
-                'project_match': best_match,
-                'prob': round(probability_percentage, 2),
-                'probability': f'{probability_percentage:.2f}%',
-                'userId': userId
-            })
-
-    avg_probability_percentage = 0
-    highest_prob_word = ""
-    highest_prob = 0
-    for match_result in word_match_results:
-        if match_result['prob'] > highest_prob:
-            highest_prob = match_result['prob']
-            highest_prob_word = match_result['word']
-        avg_probability_percentage += match_result['prob']
-
-    if len(word_match_results) > 0:
-        avg_probability_percentage = avg_probability_percentage / len(word_match_results)
-    print("average_percentage: ", avg_probability_percentage)
-    print("highest prob word: ", highest_prob_word)
-    insert_img_data(userId, avg_probability_percentage, highest_prob_word)
-
-def get_title(userId):
-    try:
-        # Create a session
-        session = Session()
-
-        # Define the SQL query to select the img_id where userId matches
-        sql_query = text("SELECT user_title FROM system_info WHERE id  = :user_id")
-
-        # Execute the SQL query with userId as a parameter
-        result = session.execute(sql_query, {"user_id": userId})
-
-        # Fetch the img_id value (assuming there's only one match)
-        img_id = result.scalar()
-
-        print("img_id", img_id, "userId", userId)
-        # Close the session
-        session.close()
-
-        return img_id
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return None
-        
-def predictCategory(userId):
-    title = get_title(userId)
-
-    if title is not None:
-        label_encoder = joblib.load('label_encoder.joblib')
-        vectorizer = joblib.load('tfif_vectorizer.joblib')
-        model = joblib.load('website_classifier_model.joblib')
-
-        original = vectorizer.transform([title])
-
-        a = model.predict(original)
-
-        result = label_encoder.inverse_transform(a)
-        print(result)
-
-        print("predicted Category: ", result[0])
-        insert_data_match(userId, result[0])
-    else:
-        print(f"Title not found for userId: {userId}")
-
-@app.route('/')
-def hello():
-    return 'Hello, Flask!'
-
-@app.route('/mlwork', methods=['POST'])
-def post_data():
-    data = request.json
-
-    # Check if 'data' contains the required keys
-    if 'userData' in data and 'userId' in data:
-        userData = data['userData']
-        userId = data['userId']
-
-        # Process the data as needed
-        # For this example, we'll just return the received data as JSON
-        response_data = {
-            'userData': userData,
-            'userId': userId
+        hourly_productivity[hour] = {
+            'productive_percentage': round(productive_percentage, 2),
+            'unproductive_percentage': round(unproductive_percentage, 2),
+            'neutral_percentage': round(neutral_percentage, 2),
+            'away_percentage': round(away_percentage, 2)
         }
 
-        check_words_in_csv3(userData, userId)
-        predictCategory(userId)
+    return hourly_productivity
 
-        return jsonify(response_data), 200
-    else:
-        return jsonify({'error': 'Invalid JSON data. "userData" and "userId" keys are required.'}), 400
+def calculate_working_hours(activities):
+    if not activities:
+        return "0h 0m"
+    first_activity = activities[0][1]
+    last_activity = activities[-1][1]
+    working_duration = last_activity - first_activity
+    hours, remainder = divmod(working_duration.total_seconds(), 3600)
+    minutes, _ = divmod(remainder, 60)
+    return f"{int(hours)}h {int(minutes)}m"
+
+@app.route('/calculate_hourly_productivity', methods=['GET'])
+def calculate_hourly_productivity():
+    devices = get_all_device_ids()
+    all_productivity_data = []
+
+    for device in devices:
+        device_id = device['device_uid']
+        user_name = device['user_name']
+        activities = get_user_activities(device_id)
+        productivity_data = calculate_productivity_internal(activities)
+        working_hours = calculate_working_hours(activities)
+
+        productivity_record = []
+        for hour, data in productivity_data.items():
+            hour_record = [
+                {'productivity': 'core productive', 'percent': data['productive_percentage']},
+                {'productivity': 'unproductive', 'percent': data['unproductive_percentage']},
+                {'productivity': 'neutral', 'percent': data['neutral_percentage']},
+                {'productivity': 'away', 'percent': data['away_percentage']}
+            ]
+            productivity_record.append(hour_record)
+
+        all_productivity_data.append({
+            'name': user_name,
+            'workingHour': working_hours,
+            'productivityRecord': productivity_record
+        })
+
+    return jsonify(all_productivity_data)
 
 if __name__ == '__main__':
-    app.run(port=8080, debug=True)
+    app.run(debug=True)
