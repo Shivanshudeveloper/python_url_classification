@@ -1,0 +1,36 @@
+{
+    "Productive": [
+        "Productivity Tools",
+        "Collaboration & Project Management",
+        "Document Collaboration & Sharing",
+        "Development",
+        "Design & Graphics",
+        "Research & Learning",
+        "Knowledge-sharing & Forums",
+        "Professional Networking",
+        "Visual Studio Code",
+        "mysql",
+        "Flask App Deployment Guide - Brave",
+        "127.0.0.1:5000/calculate_.. - SortWindDirectoryAndWork - Visual Studio Code",
+        "Activity_table.js - SortWindDirectoryAndWork - Visual Studio Code",
+        "app.py - SortWindDirectoryAndWork - Visual Studio Code",
+        "\u25cf Navbar.js - SortWindDirectoryAndWork - Visual Studio Code"
+    ],
+    "Unproductive": [
+        "Social Media",
+        "General Social Media",
+        "Entertainment & Leisure",
+        "Movies & Series Streaming",
+        "Gaming & Related Platforms",
+        "Lifestyle & Blogs",
+        "The duke of death"
+    ],
+    "Neutral": [
+        "Communication Tools",
+        "Meeting & Webinar Platforms",
+        "News & Information",
+        "localhost:5000/calculate_hourly_productivity?date=2024-07-06 - Brave"
+    ],
+    "Others": [
+    ]
+}
