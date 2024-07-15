@@ -65,13 +65,13 @@ try:
 except Exception as e:
     logging.error(f"Error setting up database connection: {e}")
 
-def get_all_device_ids():
-    logging.info("Fetching all device IDs and user names...")
+def get_all_device_ids(organization_uid):
+    logging.info("Fetching all device IDs and user names for organization UID: {organization_uid}...")
     session = Session()
     try:
-        result = session.execute(text("SELECT device_uid, user_name FROM devices")).fetchall()
+        result = session.execute(text("SELECT device_uid, user_name FROM devices WHERE organization_uid = :organization_uid"), {"organization_uid": organization_uid}).fetchall()
         devices = [{'device_uid': row[0], 'user_name': row[1]} for row in result]
-        logging.info(f"Fetched {len(devices)} devices.")
+        logging.info(f"Fetched {len(devices)} devices for organization UID: {organization_uid}.")
         return devices
     except Exception as e:
         logging.error(f"Error fetching device IDs: {e}")
@@ -87,13 +87,6 @@ def get_user_activities(device_uid, date):
             "SELECT page_title, timestamp FROM user_activity WHERE DATE(timestamp) = :date AND user_uid = :device_uid ORDER BY timestamp"
         ), {"date": date, "device_uid": device_uid}).fetchall()
         activities = [(row[0], row[1]) for row in result]
-        # logging.info(f"Fetched {len(activities)} activities for device UID: {device_uid} on date: {date}.")
-        
-        # Log the fetched activities
-        # if activities:
-        #     for activity in activities:
-        #         logging.info(f"Fetched activity - Title: {activity[0]}, Timestamp: {activity[1]}")
-        
         return activities
     except Exception as e:
         logging.error(f"Error fetching user activities: {e}")
@@ -163,7 +156,7 @@ def calculate_productivity_internal(activities):
 
         logging.info(f"Hourly activities keys: {list(hourly_activities.keys())}")
 
-        for hour in range(9, 18):  # From 9:00 AM to 6:00 PM
+        for hour in range(9, 19):  # From 9:00 AM to 7:00 PM
             hour_key = datetime.strptime(f"{hour}:00", "%H:%M").replace(year=timestamp.year, month=timestamp.month, day=timestamp.day)
             if hour_key not in hourly_activities:
                 logging.info(f"No activities found for hour: {hour_key}")
@@ -190,7 +183,6 @@ def calculate_productivity_internal(activities):
                     category, confidence, _ = predict_category(page_title)
                     status = map_category_to_productivity(category)
                     hourly_counts[status] += 1
-                    # Logging activity, prediction, and category
                     logging.info(f"Activity: {page_title}, Prediction: {category}, Confidence: {confidence:.2f}")
 
                 total_activities = sum(hourly_counts.values())
@@ -241,7 +233,11 @@ def calculate_working_hours(activities):
 @app.route('/calculate_hourly_productivity', methods=['GET'])
 def calculate_hourly_productivity():
     date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
-    devices = get_all_device_ids()
+    organization_uid = request.args.get('organization_uid')
+    if not organization_uid:
+        return jsonify({"error": "organization_uid is required"}), 400
+
+    devices = get_all_device_ids(organization_uid)
     all_productivity_data = []
 
     for device in devices:
@@ -249,11 +245,10 @@ def calculate_hourly_productivity():
         user_name = device['user_name']
         activities = get_user_activities(device_id, date)
         logging.info(f"Activities found for device ID {device_id} on date {date}.")
-        if not activities:
-            logging.info(f"No activities found for device ID {device_id} on date {date}.")
-            continue
-        productivity_data = calculate_productivity_internal(activities)
-        working_hours = calculate_working_hours(activities)
+        productivity_data = calculate_productivity_internal(activities) if activities else [
+            [{"productivity": "away", "percent": "100%"} for _ in range(6)] for _ in range(9)
+        ]
+        working_hours = calculate_working_hours(activities) if activities else "0h 0m"
 
         all_productivity_data.append({
             'name': user_name,
@@ -280,7 +275,6 @@ def predict_productivity_route():
 
     productivity = map_category_to_productivity(category)
 
-    # Log the overall prediction accuracy
     logging.info(f"Prediction accuracy for '{title}': {confidence * 100:.2f}%")
 
     return jsonify({"category": category, "productivity": productivity, "percent": "100%", "confidence": f"{confidence * 100:.2f}%"}), 200
