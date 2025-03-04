@@ -1,9 +1,9 @@
-flask==2.0.3
-flask-cors==3.0.10
-sqlalchemy==1.4.32
-mysql-connector-python==8.0.28
-python-dotenv==0.19.2
-requests==2.26.0
-pytz==2021.3
-tenacity==8.0.1
-joblib==1.1.0
+flask==2.2.5
+werkzeug==2.3.7  # Explicitly specify this version
+flask-cors==4.0.0
+sqlalchemy==2.0.23
+mysql-connector-python==8.2.0
+python-dotenv==1.0.0
+requests==2.31.0
+pytz==2024.1
+tenacity==8.2.3
