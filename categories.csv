@@ -6,6 +6,7 @@ Others,Productivity Tools,Productivity Tools
 Google Meet,Meeting & Webinar Platforms,Communication Tools
 Others,Meeting & Webinar Platforms,Communication Tools
 Slack,Chat & Instant Messaging,Communication Tools
+Whatsapp,Chat & Instant Messaging,Communication Tools
 Discord,Chat & Instant Messaging,Communication Tools
 Microsoft Teams Chat,Chat & Instant Messaging,Communication Tools
 Others,Chat & Instant Messaging,Communication Tools
@@ -24,6 +25,7 @@ Notion,Collaboration & Project Management,Collaboration & Project Management
 Confluence,Collaboration & Project Management,Collaboration & Project Management
 Others,Collaboration & Project Management,Collaboration & Project Management
 IDEs & Code Editors,Development,Development
+Visual Studio Code Editors,Development,Productive Tools
 Database Management,Development,Development
 Version Control Platforms,Development,Development
 GitHub,Development,Development
@@ -52,16 +54,17 @@ Industry-specific Publications,News & Information,News & Information
 Others,News & Information,News & Information
 Professional Networking,LinkedIn,Social Media
 Professional Networking,Others,Social Media
-General Social Media,Facebook,Social Media
-General Social Media,Twitter,Social Media
-General Social Media,Instagram,Social Media
-General Social Media,Tiktok,Social Media
-General Social Media,Others,Social Media
+Instagram,Social Media,General Social Media
+Facebook,Social Media,General Social Media
+Twitter,Social Media,General Social Media
+Tiktok,Social Media,General Social Media
+Others,Social Media,General Social Media
 Movies & Series Streaming,Netflix,Entertainment & Leisure
 Movies & Series Streaming,Hulu,Entertainment & Leisure
 Movies & Series Streaming,Disney+,Entertainment & Leisure
-Movies & Series Streaming,Others,Entertainment & Leisure
+Movies & Series Streaming,Youtube,Entertainment & Leisure
 Gaming & Related Platforms,Steam,Entertainment & Leisure
+Free Fire,Gaming & Related Platforms,Entertainment & Leisure
 Gaming & Related Platforms,Twitch,Entertainment & Leisure
 Gaming & Related Platforms,Others,Entertainment & Leisure
 Lifestyle & Blogs,Personal blogs,Entertainment & Leisure

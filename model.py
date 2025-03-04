@@ -28,7 +28,9 @@ joblib.dump(tfidf_vectorizer, 'tfif_vectorizer.joblib')
 X_train, X_test, y_train, y_test = train_test_split(X, df['label'], test_size=0.2, random_state=42)
 
 # Choose a classification model (e.g., Multinomial Naive Bayes)
-model = MultinomialNB()
+# model = MultinomialNB()
+from sklearn.neural_network import MLPClassifier
+model = MLPClassifier(hidden_layer_sizes=(100,100), max_iter=1000)
 
 # Train the model
 model.fit(X_train, y_train)
