@@ -382,6 +382,75 @@ def predict_productivity_route():
         "confidence": f"{confidence * 100:.2f}%"
     })
 
+def map_category_to_productivity(category):
+    """Map prediction categories to response keys"""
+    return {
+        'Core Productive': 'Core Productivity',
+        'Productive': 'Productivity',
+        'Idle': 'Idle',
+        'Unproductive': 'Unproductivity',
+        'Away': 'Away'
+    }.get(category, 'Idle')
+
+def calculate_daily_productivity(activities):
+    """Calculate daily productivity percentages with default Away for empty days"""
+    if not activities:
+        return {
+            'Core Productivity': 0.0,
+            'Productivity': 0.0,
+            'Unproductivity': 0.0,  
+            'Idle': 0.0,
+            'Away': 100.0  # Default to 100% Away when no activities
+        }
+    
+    counts = defaultdict(int)
+    for page_title, app_name, _ in activities:
+        category, _, _ = predict_category(page_title, app_name)
+        mapped_category = map_category_to_productivity(category)
+        counts[mapped_category] += 1
+    
+    total = len(activities)
+    percentages = {
+        'Core Productivity': (counts['Core Productivity'] / total) * 100,
+        'Productivity': (counts['Productivity'] / total) * 100,
+        'Unproductivity': (counts['Unproductivity'] / total) * 100,
+        'Idle': (counts['Idle'] / total) * 100,
+        'Away': 0.0  # Initialize to 0, calculate remainder below
+    }
+    if not percentages['Core Productivity'] and not percentages['Productivity'] and not percentages['Unproductivity'] and not percentages['Idle']:
+        percentages['Away'] = 100.0 
+    # Calculate away percentage as remainder of the total
+    calculated_total = sum(percentages.values()) - percentages['Away']
+    percentages['Away'] = max(0.0, 100.0 - calculated_total)
+    
+    return percentages
+
+
+@app.route('/getUserProductivity/<device_id>', methods=['GET'])
+def get_user_productivity(device_id):
+    # Get start date from query params
+    start_date_str = request.args.get('from')
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+    except (ValueError, TypeError) as e:
+        logging.error(f"Invalid date format: {e}")
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+
+    response_data = defaultdict(list)
+    
+    # Process 7-day window
+    for day_offset in range(7):
+        current_date = start_date + timedelta(days=day_offset)
+        activities = get_user_activities(device_id, current_date.strftime('%Y-%m-%d'))
+        daily_percentages = calculate_daily_productivity(activities)
+        
+        for category, value in daily_percentages.items():
+            response_data[category].append(round(value, 2))
+
+    logging.info(f"Generated productivity report for {device_id}")
+    return jsonify(response_data)
+
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
