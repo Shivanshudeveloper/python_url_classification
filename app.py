@@ -12,7 +12,7 @@ import requests
 import time
 from collections import defaultdict
 from tenacity import retry, stop_after_attempt, wait_exponential
-import threading
+from threading import RLock
 import hashlib
 
 # Load environment variables
@@ -27,7 +27,7 @@ CORS(app)
 
 # Enhanced cache for OpenAI responses with thread safety
 CATEGORY_CACHE = {}
-CACHE_LOCK = threading.Lock()
+CACHE_LOCK = RLock()
 CACHE_SIZE_LIMIT = 10000
 
 # Statistics tracking
@@ -242,7 +242,7 @@ def predict_category_fast(page_title, app_name):
         
         # Generate cache key
         cache_key = get_cache_key(page_title, app_name)
-        
+        print(cache_key)
         # Check cache first (thread-safe)
         with CACHE_LOCK:
             if cache_key in CATEGORY_CACHE:
@@ -258,12 +258,13 @@ def predict_category_fast(page_title, app_name):
                 logging.info(f"FAST: Hardcoded policy hit: {app_name} -> {category}")
                 with CACHE_LOCK:
                     CATEGORY_CACHE[cache_key] = category
+                    print(CATEGORY_CACHE)
                     manage_cache_size()
                 return category, 1.0, False
-        
+        print(" I am done wiht the cache part.")
         # Check for common patterns in title
         title_lower = page_title.lower()
-        
+        print(f"title_lower {title_lower}")
         # Code file extensions
         code_extensions = ['.py', '.js', '.html', '.css', '.sql', '.json', '.xml', '.md', '.java', '.cpp', '.c', '.php', '.rb', '.go', '.ts', '.jsx', '.tsx', '.vue', '.scss', '.sass', '.less']
         if any(ext in title_lower for ext in code_extensions):
@@ -472,6 +473,7 @@ def calculate_productivity_internal(activities):
             
             # Get category using FAST prediction
             category, _, _ = predict_category_fast(title, app)
+            print(category)
             category_key = category.lower()
             
             # Find the hour slot for this activity
@@ -647,6 +649,7 @@ def calculate_daily_productivity(activities):
     
     # Use time-based weighting instead of simple counting
     category_times = defaultdict(float)
+    print(activities)
     total_time = 0
     
     for i, (page_title, app_name, timestamp) in enumerate(activities):
@@ -714,12 +717,13 @@ def get_user_productivity(device_id):
             current_date = start_date + timedelta(days=day_offset)
             activities = get_user_activities(device_id, current_date.strftime('%Y-%m-%d'))
             daily_percentages = calculate_daily_productivity(activities)
-            
+            print(f'${daily_percentages} daily percentages')
             for category, value in daily_percentages.items():
                 response_data[category].append(round(value, 2))
 
         logging.info(f"Generated 7-day productivity report for {device_id}")
-        return jsonify(response_data)
+        return jsonify(dict(response_data))
+
         
     except Exception as e:
         logging.error(f"Error in getUserProductivity: {e}")
