@@ -396,11 +396,11 @@ def get_user_activities(device_uid, date_str):
             SELECT page_title, app_name, timestamp 
             FROM user_activity 
             WHERE DATE(timestamp) = :date 
-            AND user_uid = :device_uid 
+            AND user_uid::text = :device_uid 
             ORDER BY timestamp ASC
         """), {
             "date": target_date,
-            "device_uid": device_uid
+            "device_uid": str(device_uid)
         }).fetchall()
         
         activities = []
